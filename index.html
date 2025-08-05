@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <!-- Give the page a title -->
+  <title>Heatmap</title>
+  <!-- Add a link to the Leaflet CSS library so you can reference it for styling your map -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!-- Embed Mulish and Merriweather fonts from Google -->
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300&family=Mulish&display=swap" rel="stylesheet">
+  <style>
+    /* style the body */
+    body {
+      margin: 0px;
+      height: 100%;
+      width: 100%;
+    }
+
+    /* style the map */
+    #map {
+      position: absolute;
+      width: 100%;
+      top: 0px;
+      bottom: 0;
+    }
+
+    /* Set and style fonts for text in map */
+    h1 {
+      font-family: 'Mulish', sans-serif;
+      font-size: 22px;
+      display: inline-block;
+      color: black;
+      /*margin-top: 0.10em;
+      margin-bottom: 0.0em;
+      margin-left: 0.5em;
+      margin-right: 0;*/
+      font-weight: normal;
+    }   
+    
+    h2 {
+      font-family: 'Merriweather', serif;
+      font-size: 11px;
+      display: inline-block;
+      color: black;
+      /*margin-top: 0.0em;
+      margin-bottom: 0.0em;
+      margin-left: 1.0em;
+      margin-right: 0;*/
+      font-weight: normal;
+    }    
+
+    /* title */
+    /* Wrapper for toggle button (narrow strip at very top) */
+    #title-toggle-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1100;
+      width: 100%;
+      height: 25px;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding-left: 10px;
+    }
+
+    /* Toggle button styling */
+    #title-toggle {
+      background: white;
+      border: 2px solid #ccc;
+      border-radius: 0 0 4px 4px;
+      width: 30px;
+      /* lock width */
+      height: 24px;
+      /* lock height */
+      font-size: 16px;
+      line-height: 24px;
+      /* vertically center */
+      text-align: center;
+      font-family: Arial, sans-serif;
+      padding: 0;
+      display: inline-block;
+      cursor: pointer;
+      box-shadow: 2px rgba(0, 0, 0, 0.2);
+      user-select: none;
+    }
+
+    #title-toggle.rotated {
+      transform: rotate(180deg);
+      /*transition: transform 0.2s ease;*/
+      border-radius: 4px 4px 0 0;
+    }
+
+    /* Title box below toggle */
+    #map-title-box {
+      position: absolute;
+      top: 10px;
+      left: 50px;
+      z-index: 1100;
+      background: white;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+      padding: 0px 20px;
+      box-shadow: 2px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Hidden state */
+    #map-title-box.hidden {
+      display: none;
+    }
+
+    /* Adjust zoom control position */
+    .leaflet-control-zoom {
+      top: 20px;
+      /* Default spacing below the toggle */
+      left: 0px;
+    }
+
+    .leaflet-control-zoom.shifted {
+      top: 120px;
+      /* Shift down when title is visible */
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Title toggle and box -->
+  <div id="title-toggle-wrapper">
+    <div id="title-toggle" title="Toggle title">▾</div>
+  </div>
+  <div id="map-title-box" class="hidden">
+    <h1>Intensity Footprint of My Life</h1>
+  </div>
+
+  <!-- The map -->
+  <div id="map"></div>
+  <!-- Add a link to the Leaflet JavaScript library so you can reference it for building your map -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- Add a link to the jQuery JavaScript library so you can leverage ajax methods to load your data -->
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>-->
+  <!-- papaparse for bringing in google spreadsheet data -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- leaflet.heat for heat mapping -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js" integrity="sha512-KhIBJeCI4oTEeqOmRi2gDJ7m+JARImhUYgXWiOTIp9qqySpFUAJs09erGKem4E5IPuxxSTjavuurvBitBmwE0w==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- All JavaScript goes inside the script tags below -->
+  <script>
+    // define map options
+    const mapOptions = {
+      center: [31, 4.5],
+      zoom: 3,
+      minZoom: 1,
+      maxZoom: 16,
+      zoomControl: false
+    };
+
+    // define the map with the options above
+    const map = L.map("map", mapOptions);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      minZoom: 1,
+      maxZoom: 16,
+    }).addTo(map);
+
+    // Add a scale bar to the map
+    L.control.scale().addTo(map);
+
+    // Add zoom to map
+    L.control.zoom({
+      position: 'topleft'
+    }).addTo(map);
+
+    fetch('data/locations.csv')
+      .then(response => response.text())
+      .then(csvText => {
+        const parsed = Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+
+            // declare an empty layer group for the circle markers
+            const circleLayer = L.layerGroup();
+            // declare an empty array for the heat layer
+            const heatPoints = [];
+
+            // process the results
+            results.data.forEach(entry => {
+                // assign all attributes to consts
+                const lat = parseFloat(entry.lat);
+                const lng = parseFloat(entry.lng);
+                const years = parseFloat(entry.years);
+                const yearsText = entry.years;
+                const name = entry.location;
+                // skip empty
+                if (isNaN(lat) || isNaN(lng) || isNaN(years)) return;
+                // add to heat layer array
+                heatPoints.push([lat, lng, years * 500]);
+                // create circle marker
+                const circle = L.circleMarker([lat, lng], {
+                    radius: years * 2,
+                    fillColor: '#5B7C99',
+                    color: '#5B7C99',
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.5
+                });
+
+                // Handle hover events
+                circle.on('mouseover', function (e) {
+                this.setStyle({
+                    color: 'yellow',
+                    fillOpacity: 0.7
+                });
+                });
+
+                circle.on('mouseout', function (e) {
+                this.setStyle({
+                    color: '#5B7C99',
+                    fillOpacity: 0.5
+                });
+                });
+
+                circle.bindTooltip(`Place: ${name} <br> Years: ${years}`);
+                circleLayer.addLayer(circle);
+
+            });
+
+            const heatLayer = L.heatLayer(heatPoints, {
+                radius: 25,
+                blur: 25,
+                maxZoom: 17
+            });
+
+            const heatGroup = L.layerGroup([heatLayer]);
+
+            heatGroup.addTo(map);
+
+            // add layer control
+            const overlays = {
+                "Heatmap": heatGroup,
+                "Circle Markers": circleLayer
+            };
+
+            L.control.layers(overlays, null, { collapsed: false }).addTo(map);
+          }
+        });
+      })
+      .catch(error => {
+        console.error("Error fetching the CSV file:", error);
+      });
+
+    // Title
+    const toggle = document.getElementById('title-toggle');
+    const box = document.getElementById('map-title-box');
+
+    toggle.addEventListener('click', () => {
+      //const zoomControl = document.querySelector('.leaflet-control-zoom');
+      const isHidden = box.classList.contains('hidden');
+
+      box.classList.toggle('hidden');
+      toggle.classList.toggle('rotated', isHidden);
+      toggle.title = isHidden ? 'Hide title' : 'Show title';
+
+      //if (zoomControl) {
+      //zoomControl.classList.toggle('shifted', isHidden);
+      //}
+    });
+  </script>
+</body>
+
+</html>
